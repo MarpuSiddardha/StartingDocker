@@ -16,7 +16,7 @@ spec:
       serviceAccountName: app-service-account  # Add this line
       containers:
         - name: app
-          image:  ghcr.io/marpusiddardha/startingdocker:latest
+          image:  starting-docker-app:local
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
