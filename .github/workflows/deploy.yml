@@ -52,11 +52,20 @@ jobs:
 
       - name: Deploy to Minikube
         run: |
+          # Load the built image into Minikube
           minikube image load ghcr.io/marpusiddardha/startingdocker:latest
+          
+          # Create namespace if it doesn't exist
           kubectl create namespace starting-docker --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Apply Kubernetes manifests
           kubectl apply -f k8s/ -n starting-docker
+          
+          # Wait for deployments to be ready
           kubectl wait --for=condition=available --timeout=300s deployment/app -n starting-docker
           kubectl wait --for=condition=available --timeout=300s deployment/postgres -n starting-docker
+          
+          # Port-forward the service
           kubectl port-forward -n starting-docker svc/app-service 8080:8080 --address=0.0.0.0 > /dev/null 2>&1 &
           sleep 10
 
@@ -70,6 +79,7 @@ jobs:
       - name: Get ngrok URL
         id: ngrok
         run: |
+          # Wait for ngrok to be ready
           sleep 5
           NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
           echo "ngrok_url=$NGROK_URL" >> $GITHUB_OUTPUT

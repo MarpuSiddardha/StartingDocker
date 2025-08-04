@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Minikube
+minikube*
+!minikube.exe  # Only if you're on Windows and need the Windows binary
