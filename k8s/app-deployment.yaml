@@ -16,8 +16,8 @@ spec:
       serviceAccountName: app-service-account  # Add this line
       containers:
         - name: app
-          image: starting-docker-app:latest
-          imagePullPolicy: IfNotPresent
+          image:  ghcr.io/marpusiddardha/startingdocker:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           envFrom:

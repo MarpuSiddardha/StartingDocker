@@ -1,0 +1,90 @@
+name: Deploy to Minikube with ngrok
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/marpusiddardha/startingdocker:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set up Minikube
+        uses: manusa/actions-setup-minikube@v2.7.0
+        with:
+          minikube version: 'v1.30.1'
+          kubernetes version: 'v1.26.3'
+          driver: docker
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy to Minikube
+        run: |
+          minikube image load ghcr.io/marpusiddardha/startingdocker:latest
+          kubectl create namespace starting-docker --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f k8s/ -n starting-docker
+          kubectl wait --for=condition=available --timeout=300s deployment/app -n starting-docker
+          kubectl wait --for=condition=available --timeout=300s deployment/postgres -n starting-docker
+          kubectl port-forward -n starting-docker svc/app-service 8080:8080 --address=0.0.0.0 > /dev/null 2>&1 &
+          sleep 10
+
+      - name: Set up ngrok
+        uses: actions-hub/ngrok@v3
+        env:
+          NGROK_AUTH: ${{ secrets.NGROK_AUTH_TOKEN }}
+          NGROK_PORT: 8080
+          NGROK_PROTOCOL: http
+
+      - name: Get ngrok URL
+        id: ngrok
+        run: |
+          sleep 5
+          NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          echo "ngrok_url=$NGROK_URL" >> $GITHUB_OUTPUT
+          echo "Public URL: $NGROK_URL"
+
+      - name: Show ngrok URL
+        run: |
+          echo "## 🚀 Application Deployed Successfully!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 Public URLs" >> $GITHUB_STEP_SUMMARY
+          echo "- [Application](${{ steps.ngrok.outputs.ngrok_url }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Actuator Health](${{ steps.ngrok.outputs.ngrok_url }}/actuator/health)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔍 Kubernetes Resources" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "kubectl get all -n starting-docker" >> $GITHUB_STEP_SUMMARY
+          kubectl get all -n starting-docker >> $GITHUB_STEP_SUMMARY 2>&1
+          echo '```' >> $GITHUB_STEP_SUMMARY
