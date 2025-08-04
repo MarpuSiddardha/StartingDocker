@@ -16,8 +16,8 @@ spec:
       serviceAccountName: app-service-account  # Add this line
       containers:
         - name: app
-          image:  starting-docker-app:local
-          imagePullPolicy: Always
+          image: starting-docker-app:local
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
