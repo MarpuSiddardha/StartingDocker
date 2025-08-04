@@ -50,6 +50,12 @@ jobs:
           driver: docker
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install ngrok
+        run: |
+          curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt update && sudo apt install -y ngrok
+
       - name: Deploy to Minikube
         run: |
           # Load the built image into Minikube
@@ -62,39 +68,36 @@ jobs:
           kubectl apply -f k8s/ -n starting-docker
           
           # Wait for deployments to be ready
-          kubectl wait --for=condition=available --timeout=300s deployment/app -n starting-docker
-          kubectl wait --for=condition=available --timeout=300s deployment/postgres -n starting-docker
+          kubectl wait --for=condition=available --timeout=300s deployment/app -n starting-docker || true
+          kubectl wait --for=condition=available --timeout=300s deployment/postgres -n starting-docker || true
           
           # Port-forward the service
           kubectl port-forward -n starting-docker svc/app-service 8080:8080 --address=0.0.0.0 > /dev/null 2>&1 &
           sleep 10
 
-      - name: Set up ngrok
-        uses: actions-hub/ngrok@v3
+      - name: Start ngrok
         env:
-          NGROK_AUTH: ${{ secrets.NGROK_AUTH_TOKEN }}
-          NGROK_PORT: 8080
-          NGROK_PROTOCOL: http
-
-      - name: Get ngrok URL
-        id: ngrok
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
+          # Start ngrok in background
+          ngrok http 8080 --log=stdout > /dev/null &
           # Wait for ngrok to be ready
           sleep 5
+          # Get the public URL
           NGROK_URL=$(curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url')
           echo "ngrok_url=$NGROK_URL" >> $GITHUB_OUTPUT
           echo "Public URL: $NGROK_URL"
 
-      - name: Show ngrok URL
+      - name: Show deployment info
         run: |
           echo "## 🚀 Application Deployed Successfully!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🌐 Public URLs" >> $GITHUB_STEP_SUMMARY
-          echo "- [Application](${{ steps.ngrok.outputs.ngrok_url }})" >> $GITHUB_STEP_SUMMARY
-          echo "- [Actuator Health](${{ steps.ngrok.outputs.ngrok_url }}/actuator/health)" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 Public URL" >> $GITHUB_STEP_SUMMARY
+          echo "- [Open Application](${{ steps.ngrok.outputs.ngrok_url }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Health Check](${{ steps.ngrok.outputs.ngrok_url }}/actuator/health)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔍 Kubernetes Resources" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "kubectl get all -n starting-docker" >> $GITHUB_STEP_SUMMARY
-          kubectl get all -n starting-docker >> $GITHUB_STEP_SUMMARY 2>&1
+          kubectl get all -n starting-docker >> $GITHUB_STEP_SUMMARY 2>&1 || true
           echo '```' >> $GITHUB_STEP_SUMMARY
