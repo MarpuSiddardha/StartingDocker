@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-service-account
+  namespace: starting-docker
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-role
+  namespace: starting-docker
+rules:
+  - apiGroups: ["", "apps", "extensions"]
+    resources: ["pods", "services", "endpoints", "deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-role-binding
+  namespace: starting-docker
+subjects:
+  - kind: ServiceAccount
+    name: app-service-account
+    namespace: starting-docker
+roleRef:
+  kind: Role
+  name: app-role
+  apiGroup: rbac.authorization.k8s.io
